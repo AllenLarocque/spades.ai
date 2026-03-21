@@ -61,7 +61,6 @@ only data and parameters change.
 **AI should:**
 - Always use SpaDES path accessors — never `file.path("data", "myFile.tif")`
 - Parameterise anything that might vary by study area
-- Use `suppliedElsewhere()` in the `init` event function before assigning object defaults
 
 **AI should avoid:**
 - Hardcoded CRS strings (derive from `sim$studyArea` or `sim$rasterToMatch`)
@@ -105,6 +104,7 @@ for another that produces the same X, as long as the class and structure match.
 - Update `createsOutput` when adding a new `sim$` assignment
 - Update `expectsInput` when adding a new `sim$` read
 - Keep objectClass accurate — `SpatRaster` ≠ `RasterLayer`
+- Call `suppliedElsewhere("objectName", sim)` in the `init` event function before assigning default values — prevents overwriting an object another module will provide via contract
 
 **AI should avoid:**
 - Declaring objects in `createsOutput` that the module never actually assigns to `sim$`
@@ -150,8 +150,7 @@ regressions when code changes.
   # In tests/testthat/test-myModule.R
   test_that("init creates expected output", {
     sim <- testInit("myModule",
-                    params = list(myModule = list(paramA = 5)),
-                    objects = list(studyArea = testStudyArea))
+                    params = list(myModule = list(paramA = 5)))
     sim <- spades(sim, events = "init")
     expect_s3_class(sim$outputObjectName, "data.table")
   })
