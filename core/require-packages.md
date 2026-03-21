@@ -21,7 +21,7 @@ library(terra)
 install.packages("data.table")
 
 # Right
-Require::Require(c("terra", "data.table"))
+Require::Require(c("terra", "data.table"))  # Require::Require() — package and function share the same name
 ```
 
 ---
