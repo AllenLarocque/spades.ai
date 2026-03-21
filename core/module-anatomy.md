@@ -97,12 +97,14 @@ doEvent.moduleName <- function(sim, eventTime, eventType, debug = FALSE) {
   switch(eventType,
     init = {
       sim <- Init(sim)
-      sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "moduleName", "plot")
-      sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "moduleName", "save")
+      if (!is.na(P(sim)$.plotInitialTime))
+        sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "moduleName", "plot")
+      if (!is.na(P(sim)$.saveInitialTime))
+        sim <- scheduleEvent(sim, P(sim)$.saveInitialTime, "moduleName", "save")
       sim <- scheduleEvent(sim, start(sim) + 1,          "moduleName", "grow")
     },
     plot = {
-      sim <- Plot(sim)
+      sim <- Plot(sim)  # calls the module's own Plot wrapper below — NOT quickPlot::Plot() directly
       sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "moduleName", "plot")
     },
     save = {
@@ -172,9 +174,13 @@ Grow <- function(sim) {
 ### `Plot` and `Save`
 
 ```r
+# Name this function something other than "Plot" to avoid shadowing quickPlot::Plot().
+# Convention: use the module name as a suffix (e.g., plotMyModule, plotBiomassCore).
+# Here it is named "Plot" only because the doEvent() example above calls Plot(sim) —
+# in real modules, rename both the call site and this function together.
 Plot <- function(sim) {
   if (!is.na(P(sim)$.plotInitialTime)) {
-    quickPlot::Plot(sim$outputRaster, title = "My Output")  # quickPlot::Plot, NOT recursive self-call
+    quickPlot::Plot(sim$outputRaster, title = "My Output")  # MUST qualify — bare Plot() here = infinite recursion
   }
   return(invisible(sim))
 }
