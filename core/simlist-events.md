@@ -138,7 +138,7 @@ simulation continues from where it left off using the new code.
 
 ```r
 # At R prompt after an error or manual stop:
-restartSpaDES(sim)
+restartSpaDES()  # no sim argument — SpaDES tracks the sim state internally
 ```
 
 ---
@@ -164,7 +164,9 @@ doEvent.myModule <- function(sim, eventTime, eventType, debug = FALSE) {
       sim <- Plot(sim)
       sim <- scheduleEvent(sim, time(sim) + P(sim)$.plotInterval, "myModule", "plot",
                            eventPriority = 6)
-    }
+    },
+    warning(paste("Undefined event type: '", eventType, "' in module '",
+                  currentModule(sim), "'", sep = ""))
   )
   return(invisible(sim))
 }
