@@ -152,8 +152,9 @@ doEvent.myModule <- function(sim, eventTime, eventType, debug = FALSE) {
       sim <- Init(sim)
       # Schedule first occurrence of each recurring event
       sim <- scheduleEvent(sim, start(sim) + 1,          "myModule", "grow")
-      sim <- scheduleEvent(sim, P(sim)$.plotInitialTime,  "myModule", "plot",
-                           eventPriority = 6)
+      if (!is.na(P(sim)$.plotInitialTime))
+        sim <- scheduleEvent(sim, P(sim)$.plotInitialTime, "myModule", "plot",
+                             eventPriority = 6)
     },
     grow = {
       sim <- Grow(sim)
