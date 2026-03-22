@@ -4,6 +4,20 @@ The core insight is that **before the first `source("global.R")`, modules are no
 
 ---
 
+## Step 0: Establish Editing Scope
+
+**At the start of every session**, before writing or modifying any code, ask the user:
+
+> "Which modules are you actively developing in this project? I will only edit those modules and `global.R`. All other modules are read-only — I may read them for context but will not modify them."
+
+**Rule:** Once the user specifies the editable modules, treat all other module files as read-only for the remainder of the session. This includes modules downloaded from GitHub and any modules owned by other team members. The modular architecture of SpaDES means modules can be developed and maintained independently — editing a module you don't own can break it for others or introduce conflicts with upstream changes.
+
+**Always editable without asking:** `global.R` and any helper files in the project-level `R/` directory.
+
+**If a fix seems to require editing a locked module:** Stop and tell the user before making any changes. The right approach is almost always to adjust `global.R` (parameters, inputs, module list) rather than patching a module you don't own.
+
+---
+
 ## Step 1: Write `global.R`
 
 Follow `workflows/global-construction.md` (and `core/setup-project.md` for `setupProject()` syntax reference). At this point modules are not yet downloaded. Write defensively; annotate unknowns with `# TODO:`.
