@@ -64,6 +64,10 @@ Modules do not call each other directly. They read from and write to `sim$` (the
 | PERFICT in depth | `core/perfict-principles.md` |
 | LandR Biomass forest succession pipeline | `workflows/LandR-biomass.md` |
 | Creating a module-level CLAUDE.md | `templates/module-context-template.md` |
+| Setting up a new project (`setupProject()` syntax) | `core/setup-project.md` |
+| Writing a `global.R` from scratch | `workflows/global-construction.md` |
+| Step-by-step development workflow (first run, reading modules, iteration) | `workflows/development-workflow.md` |
+| Error reference — diagnosing `setupProject`, `simInit2`, `spades()` failures | `workflows/iterative-run.md` |
 
 > Paths are relative to the [`spades.ai`](https://github.com/PredictiveEcology/spades.ai) repository root. When this file is used as `CLAUDE.md` in a module repo, fetch the referenced files from that repository.
 
