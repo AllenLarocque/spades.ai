@@ -15,6 +15,7 @@ core/
   module-anatomy.md                   # How to write and read a SpaDES module
   simlist-events.md                   # simList, simInit(), spades(), event scheduling
   caching-reproducibility.md          # Cache(), prepInputs(), suppliedElsewhere()
+  caching-in-practice.md              # Why a Cache() call misses every run -- or hits and is wrong
   require-packages.md                 # Package management with Require
 workflows/
   LandR-biomass.md                    # LandR Biomass forest succession pipeline
