@@ -4,8 +4,10 @@ A field companion to [`caching-reproducibility.md`](caching-reproducibility.md),
 `Cache()` **is**. This covers why a correct-looking `Cache()` call still recomputes for hours, and
 how to tell a cache that is merely wasteful from one that is quietly **wrong**.
 
-Everything here was measured on a 31-module amplicon pipeline, not inferred. Verified against
-`reproducible` 3.1.1.9063.
+Everything here was measured on a 31-module amplicon pipeline across five production runs, not
+inferred. Verified against `reproducible` 3.1.1.9063. Net effect of applying it: a no-change re-run
+went from **13 h to 3.1 h with 154 cache hits and 0 misses** — the residual is work that was never
+cached at all, not cache failure.
 
 ---
 
@@ -246,7 +248,112 @@ readBackedThing <- function(handle) {
 
 ---
 
-## 6. Determinism Is a Prerequisite
+## 6. Failure Mode C — The Function Mutates Global State
+
+The subtlest of the three, and the hardest to see: **a cached function that mutates
+process-global state makes cache keys depend on cache *history* rather than on content.**
+
+`Cache()` digests the arguments **before** calling. So on a HIT the function never runs and the
+state is untouched; on a MISS it runs and the state advances. Anything digested *afterwards* then
+depends on whether an earlier call hit.
+
+Measured on a real pipeline. `heatTreeSweep()` sweeps a `metacoder::Taxmap`, and sweeping mutates a
+shared taxon-ID pool inside `metacoder`/`taxa`. Two fixtures built identically, only `A` swept:
+
+```
+before sweep:   A = 8a5e13ba   B = 8a5e13ba
+after  sweep:   A = 8cd5c82a   B = 185d1099    <- B was NEVER passed to the sweep
+fresh build C after the sweep = 185d1099       <- and new objects match B, not the original
+```
+
+The consequence in production, over five runs of a 31-module pipeline: **exactly one spurious cache
+miss per run**, always in this function, always a *different* subset, **marching one position later
+each run and never converging** — at ~25 min a time.
+
+```
+run 1:  d48cfba8  33bb5f0d  93638d22*MISS  f2fb101a        20b1bc17
+run 2:  d48cfba8  33bb5f0d  93638d22       043bcffe*MISS   20b1bc17
+run 3:  d48cfba8  33bb5f0d  93638d22       043bcffe        534ce4e9*MISS
+```
+
+Read run 2: subset 3 now *hits*, so the sweep never runs, so the global state is never advanced —
+and subset 4, digested under the un-advanced state, no longer matches the key it was stored under.
+It misses, computes, advances the state, and subset 5 hits again. Next run the boundary moves one
+position later. Forever.
+
+### How to recognise it
+
+- exactly one miss per run, in the same function, on a rotating target
+- every input provably unchanged, and the producer provably deterministic
+- the miss **moves** rather than converging — the signature that separates this from a cold cache
+- ⚠️ **two runs cannot distinguish this from inputs settling.** Run 2 looks like convergence. It
+  takes a **third** run to see the pattern — or a scaled-down reproduction (below).
+
+### The fix
+
+Do not digest the contaminated object. Digest its **content**, and pin the key with `.cacheExtra`:
+
+```r
+Cache(heatTreeSweep, tm, params,
+      omitArgs    = "daTaxmap",              # <- the FORMAL name, see the trap below
+      .cacheExtra = taxmapContentKey(tm),    # coefficients + taxon names + edge list
+      cachePath = cachePath(sim), userTags = "heatTree")
+```
+
+The content fingerprint is unaffected by any of it — identical for `A`, `B` and `C`, before and
+after. **This is not the `omitArgs` trap of section 3.** There, omitting *drops* information and
+weakens the key. Here the omitted argument is *replaced* by an equivalent stable fingerprint, and
+`params` stays fully hashed. The test to apply before ever writing `omitArgs`:
+
+> **Does `.cacheExtra` restore everything `omitArgs` removed?** If not, you are weakening the key.
+
+⛔ **Cloning the argument does not help** and was tried first. The contaminated state is global, not
+in the object — `B` moved without ever being passed in.
+
+### ⚠️ `omitArgs` names the FORMAL, and fails silently
+
+```r
+heatTreeSweep <- function(daTaxmap, params) { ... }
+
+Cache(heatTreeSweep, tm, params, omitArgs = "tm", ...)        # matches NOTHING
+Cache(heatTreeSweep, tm, params, omitArgs = "daTaxmap", ...)  # correct
+```
+
+`omitArgs` matches **argument names in `FUN`**, not the caller's local variable. A name that matches
+nothing is **not an error and produces no warning** — the argument stays in the digest and the fix
+is silently inert. This exact mistake made a first attempt at the fix a no-op that looked correct.
+
+Worth a test, because it is cheap and the failure is invisible:
+
+```r
+test_that("every omitArgs name is a real formal of the cached function", {
+  src <- paste(readLines("myModule.R"), collapse = "\n")
+  for (one in regmatches(src, gregexpr('omitArgs\\s*=\\s*"[^"]+"', src))[[1]]) {
+    nm <- sub('.*"([^"]+)".*', "\\1", one)
+    expect_true(nm %in% names(formals(myCachedFn)))
+  }
+})
+```
+
+### Reproduce it in seconds, not in days
+
+A history-dependent cache bug needs three full runs to even become visible. Do not pay that. Two
+objects with different content, swept in sequence, across three short sessions reproduces it exactly:
+
+```
+             BROKEN            FIXED
+session 1    X MISS Y MISS     X MISS Y MISS   (cold, expected)
+session 2    X HIT  Y MISS     X HIT  Y HIT    <- the diagnostic row
+session 3    X HIT  Y HIT      X HIT  Y HIT
+```
+
+Session 2 is the whole test: `X` hits, so nothing runs, so the state is not advanced — and a broken
+key makes `Y` miss. This ran in two minutes and caught the inert-`omitArgs` bug that a 3-hour
+production run would have reported as success.
+
+---
+
+## 7. Determinism Is a Prerequisite
 
 An unseeded stochastic step produces a different result every run. Downstream `Cache()` calls hash
 that result, so **one unseeded step invalidates the entire chain below it**, no matter how clean
@@ -262,7 +369,7 @@ as a module parameter so it is recorded. In the measured pipeline this single di
 
 ---
 
-## 7. Checklist
+## 8. Checklist
 
 Before merging any `Cache()` call:
 
@@ -271,13 +378,17 @@ Before merging any `Cache()` call:
       path string is almost always a bug.
 - [ ] Are working files under `cachePath()`, so `clearCache()` clears them too?
 - [ ] If you reached for `omitArgs`, does the function return any path? If so, stop — see §3.
+- [ ] Does the function mutate anything outside its return value -- including package-global
+      state? A cached function must be pure, or its keys become a function of cache history.
+- [ ] If you used `omitArgs`, is every name a real **formal** of the cached function? It fails
+      silently otherwise.
 - [ ] Is every stochastic step inside seeded from a module parameter?
 - [ ] Does the call carry `userTags` naming the module, so you can inspect and clear selectively?
 - [ ] If the result contains a path, is the target validated on load?
 - [ ] **Run it twice with no changes. The second run reports `Loaded!`.** If not, it is a bug — fix
       it now, because the cost recurs on every future run and compounds with pipeline length.
 
-## 8. Anti-Patterns
+## 9. Anti-Patterns
 
 | pattern | why it bites |
 |---|---|
@@ -289,6 +400,9 @@ Before merging any `Cache()` call:
 | reimplementing an existing fingerprint | drops locale/version/NA safeguards that are invisible until they bite |
 | clearing the whole cache to fix one module | discards unrelated valid work — use `userTags` |
 | `reproducible.useCache = FALSE` left on after debugging | every run pays full cost; looks like a cache bug |
+| a cached function that mutates global state | keys depend on whether earlier calls hit; one rotating miss per run, never converging |
+| `omitArgs` naming the caller's variable instead of the formal | matches nothing, no warning, fix is silently inert |
+| concluding from TWO runs that a cache is stable | a history-dependent miss looks like convergence on run 2; you need three, or a reproduction |
 | trusting a green test suite to catch this | keys are a runtime property of production paths; fixtures use temp dirs where the bug cannot appear |
 
 ---
