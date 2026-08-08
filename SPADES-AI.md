@@ -60,6 +60,7 @@ Modules do not call each other directly. They read from and write to `sim$` (the
 | Writing or editing a module | `core/module-anatomy.md` |
 | How the simulation object works / event scheduling | `core/simlist-events.md` |
 | Caching, data download, reproducibility | `core/caching-reproducibility.md` |
+| A `Cache()` call recomputes every run, or returns a stale result | `core/caching-in-practice.md` |
 | Package management | `core/require-packages.md` |
 | PERFICT in depth | `core/perfict-principles.md` |
 | LandR Biomass forest succession pipeline | `workflows/LandR-biomass.md` |
