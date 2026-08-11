@@ -6,7 +6,8 @@ reusable R scripts with formal metadata; they share a single simulation environm
 and communicate exclusively through named objects on that environment. Any model that can be
 written in R — or called from R via Python, C++, or Java — can be built as a SpaDES workflow.
 
-Key packages: `SpaDES.core`, `reproducible`, `Require`, `SpaDES.project`, `SpaDES.experiment`, `LandR`.
+Key packages: `SpaDES.core`, `reproducible`, `Require`, `SpaDES.project`, `LandR`.
+(`SpaDES.experiment` is **deprecated** — its experiment functions now live in `SpaDES.project`.)
 Primary GitHub org: https://github.com/PredictiveEcology
 
 ---
