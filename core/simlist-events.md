@@ -112,21 +112,74 @@ Plot and save events conventionally use a priority of 6 (slightly after simulati
 
 ---
 
-## `experiment2()`
+## Experiments — running a workflow many times
 
-Runs factorial simulation experiments — all combinations of parameter values.
-Provided by `SpaDES.experiment` (not `SpaDES.core`) — ensure it is loaded or listed in `reqdPkgs`.
+An "experiment" runs a simulation repeatedly with varying parameters, inputs, paths, scenarios, or
+replicates: stochastic replication, scenario analysis, sensitivity sweeps, ensemble datasets.
+
+> ⚠️ **`SpaDES.experiment` is deprecated** (since 2026-05-22) and no longer maintained. Its
+> functions forward to **`SpaDES.project`**, which is now their maintained home. Depend on
+> `SpaDES.project`, not `SpaDES.experiment`.
+
+The family splits in two, and **choosing the wrong half is the common mistake**.
+
+### In-memory — `experiment2()` / `experiment()`
+
+Take `simList` object(s) directly, run them, and return a `simLists` (an environment holding every
+run's `simList` at once). Post-process with `as.data.table.simLists()`.
+
+Use when the run set is modest, **fits comfortably in RAM**, and you want the results back in your
+session. They are **not** built for resume-after-crash, cross-machine runs, or HPC.
 
 ```r
-# requires SpaDES.experiment
-results <- experiment2(
+# requires SpaDES.project
+results <- SpaDES.project::experiment2(
   mySim,
-  params = list(
-    moduleName = list(paramA = c(1, 5, 10))
-  ),
+  params = list(moduleName = list(paramA = c(1, 5, 10))),
   replicates = 3
 )
 ```
+
+`experiment()` wraps `experiment2()` and builds the factorial set for you via `factorialDesign()`.
+
+> ⚠️ Every run's `simList` is held simultaneously. If one `simList` is large (hundreds of MB is
+> ordinary for a data-heavy workflow), a modest factorial will exhaust RAM. Size this before
+> reaching for it.
+
+### Queue-driven — `experimentTmux()` / `experimentFuture()` / `experimentSBATCH()`
+
+Built around a project `global.R` and a shared job queue. Each row of a `data.frame` is one job;
+**a worker assigns each column's value to a variable of that name in `.GlobalEnv`, then `source()`s
+`global.R`**. So `global.R` is written once and parameterized by the grid.
+
+Use when runs are long, numerous, memory-bound, spread across machines, or need to resume.
+
+```r
+df <- data.frame(scenarioName = c("baseline", "highFire"))
+
+SpaDES.project::experimentFuture(
+  df,
+  global_path  = "global.R",
+  queue_path   = "queue.rds",   # file-locked queue; keep it to resume, delete it to start over
+  n_workers    = 2,
+  runNameLabel = quote(scenarioName)
+)
+```
+
+- **`experimentTmux()`** — one tmux pane per worker, optionally over ssh. Best while debugging;
+  you can watch workers live and stop them with `tmuxKillPanes()`.
+- **`experimentFuture()`** — background processes (`callr::r_bg()`, or `future::cluster` when
+  workers span machines). Best for stable scripts.
+- **`experimentSBATCH()`** — one Slurm job per worker. Inspect generated scripts with
+  `dry_run = TRUE`.
+
+The queue's `status` column (`PENDING` / `INTERRUPTED` / `DONE`) is what gives **resume after a
+crash**: workers skip `DONE` rows. Set `n_workers = 1` when a single run already saturates RAM —
+the queue still buys unattended sequencing and resume.
+
+Because each job's `outputPath` must be distinct, pair this with the **`scenario`** helpers
+(`scenarioFieldsSet()`, `as_scenario()`, `as_path()`, `as_tarname()`), which map a run's field
+values to an output path and parse it back again.
 
 ---
 

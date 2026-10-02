@@ -60,6 +60,36 @@ Objects this module assigns to `sim$`. All are declared in `createsOutput()` in 
 
 ---
 
+## Cost & Scaling
+
+How this module's wall time and peak memory scale with the drivers that actually move them —
+typically the size of the primary data object (e.g. `ntaxa`, `ncell`, `nsamples`), the number of
+subsets or strata it loops over, and any replicate/permutation parameter.
+
+**Give the exponent, and label every figure `MEASURED` or `ESTIMATED`.** A figure extrapolated
+from a single scale point is a guess wearing a number's clothing: one point is consistent with
+every exponent. Two points fix it. This distinction is the whole value of the section — a module
+that is comfortable at one scale and impossible at another looks identical in its metadata.
+
+| Driver | Time | Peak memory | Anchor |
+|--------|------|-------------|--------|
+| `ntaxa` | O(n²) | O(n²) — distance matrix materialized in RAM | `MEASURED` 12,923 → 2.6 h, 1.3 GB |
+| `nsamples` | O(n) | O(1) | `MEASURED` 299, included above |
+| `nRuns` | O(n) | O(1) | `MEASURED` 1000, included above |
+
+**Hard limits.** Any scale at which this module *fails* rather than merely slows — an allocation
+exceeding RAM, a file-size ceiling, an integer overflow, a dependency's own cap. State the
+crossover point and what the failure looks like, so a caller can guard it instead of discovering
+it mid-run.
+
+**Cheap knobs.** Parameters that trade accuracy or completeness for time, and roughly what each
+one buys.
+
+> If the scaling is genuinely unmeasured, write `UNMEASURED` and say what it would take to find
+> out. That is honest and actionable. A plausible-looking guess is neither.
+
+---
+
 ## Non-Obvious Implementation Details
 
 Things an AI would get wrong without being explicitly told. Be specific.
